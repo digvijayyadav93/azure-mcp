@@ -1,0 +1,4 @@
+description: Read-only customer and order MCP tools
+connections:
+  - name: customer-data-mcp-connection
+
