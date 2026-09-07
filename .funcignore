@@ -1,0 +1,15 @@
+.git*
+.venv/
+.pytest_cache/
+tests/
+agent/
+azure/
+docs/
+foundry/
+scripts/
+requirements-dev.txt
+requirements-azure.txt
+README.md
+TEST_REPORT.md
+*.zip
+local.settings.json

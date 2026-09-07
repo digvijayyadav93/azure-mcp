@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+local.settings.json
+azure/config.psd1
+data/*.db
+*.zip
+.vscode/
