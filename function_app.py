@@ -10,6 +10,5 @@ from app.runtime import asgi_app
 app = func.AsgiFunctionApp(
     app=asgi_app,
     http_auth_level=func.AuthLevel.ANONYMOUS,
-    function_name="digvijay_mcp",
+    function_name="azure_mcp",
 )
-

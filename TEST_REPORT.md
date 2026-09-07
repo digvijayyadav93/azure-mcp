@@ -83,7 +83,7 @@ MCP HTTP request -> MCP tool -> APIBackend -> sample DB API -> SQLite -> MCP res
 
 - All Python sources compiled successfully.
 - `function_app.py` imported successfully.
-- Azure Functions indexed one `AsgiFunctionApp` named `digvijay_mcp` with two bindings.
+- Azure Functions indexed one `AsgiFunctionApp` named `azure_mcp` with two bindings.
 
 Azure deployment and Microsoft Foundry execution require the user's Azure subscription, project, model deployment, and permissions, so those external checks are intentionally performed after transfer.
 

@@ -1,4 +1,4 @@
-# Digvijay Customer Data MCP
+# Azure MCP Server
 
 A complete sample showing how a Microsoft Foundry agent can call customer-data tools through a remote MCP server hosted in Azure Functions.
 
