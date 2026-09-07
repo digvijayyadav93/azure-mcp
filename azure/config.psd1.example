@@ -1,0 +1,35 @@
+@{
+    # Azure subscription and shared resource location
+    SubscriptionId          = "00000000-0000-0000-0000-000000000000"
+    Location                = "eastus"
+    ResourceGroupName       = "rg-customer-data-dev"
+
+    # Azure Functions resources. Both names must be globally unique.
+    StorageAccountName      = "stcustomerdata12345"
+    FunctionAppName         = "func-customer-data-12345"
+    PythonVersion           = "3.13"
+
+    # UseApi=false gives a self-contained Azure proof with sample SQLite data.
+    # Change to true only when DB_API_BASE_URL points to a separate API.
+    UseApi                   = $false
+    DbApiBaseUrl             = ""
+
+    # Microsoft Foundry resources. FoundryResourceName must be globally unique.
+    FoundryResourceName      = "foundry-customer-data-12345"
+    FoundryProjectName       = "customer-data-project"
+
+    # Model defaults follow the Microsoft Foundry CLI quickstart. Change these
+    # values if this model/version/SKU is unavailable in the selected region.
+    ModelDeploymentName      = "gpt-5-mini"
+    ModelName                = "gpt-5-mini"
+    ModelVersion             = "2025-08-07"
+    ModelFormat              = "OpenAI"
+    ModelSkuName             = "GlobalStandard"
+    ModelSkuCapacity         = 10
+
+    # Agent and authenticated MCP connection
+    AgentName                = "customer-data-agent"
+    McpConnectionName        = "customer-data-mcp-connection"
+    SkipAgentSmokeTest       = $false
+}
+
