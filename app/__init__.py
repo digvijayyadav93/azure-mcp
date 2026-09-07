@@ -1,0 +1,1 @@
+"""Azure MCP server package."""
