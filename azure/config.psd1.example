@@ -9,17 +9,19 @@
     FunctionAppName         = "func-customer-data-12345"
     PythonVersion           = "3.13"
 
-    # UseApi=false gives a self-contained Azure proof with sample SQLite data.
-    # Change to true only when DB_API_BASE_URL points to a separate API.
+    # Direct Azure SQL mode: keep UseApi=false and provide a managed-identity
+    # connection string. Leave SqlConnectionString empty to use local SQLite.
+    # For a separate DB API, set UseApi=true, set DbApiBaseUrl, and leave the
+    # SQL connection string empty.
     UseApi                   = $false
     DbApiBaseUrl             = ""
+    SqlConnectionString      = "Server=your-server.database.windows.net;Database=your-database;Authentication=ActiveDirectoryMSI;Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
 
     # Microsoft Foundry resources. FoundryResourceName must be globally unique.
     FoundryResourceName      = "foundry-customer-data-12345"
     FoundryProjectName       = "customer-data-project"
 
-    # Model defaults follow the Microsoft Foundry CLI quickstart. Change these
-    # values if this model/version/SKU is unavailable in the selected region.
+    # Change these values if the model/version/SKU is unavailable in the region.
     ModelDeploymentName      = "gpt-5-mini"
     ModelName                = "gpt-5-mini"
     ModelVersion             = "2025-08-07"
@@ -32,4 +34,3 @@
     McpConnectionName        = "customer-data-mcp-connection"
     SkipAgentSmokeTest       = $false
 }
-
