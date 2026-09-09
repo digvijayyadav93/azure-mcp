@@ -28,20 +28,27 @@ def create_mcp_server(backend: CustomerBackend) -> MCPServer:
 
     @server.tool()
     def search_customers(
-        name: str | None = None,
-        country: str | None = None,
-        tier: str | None = None,
+        name: str = "",
+        country: str = "",
+        tier: str = "",
     ) -> list[dict[str, Any]]:
-        """Search customers by optional name, country, and membership tier."""
-        return backend.search_customers(name=name, country=country, tier=tier)
+        """Search customers. Use an empty string for filters that are not needed."""
+        return backend.search_customers(
+            name=name or None,
+            country=country or None,
+            tier=tier or None,
+        )
 
     @server.tool()
     def list_orders(
-        customer_id: int | None = None,
-        status: str | None = None,
+        customer_id: int = 0,
+        status: str = "",
     ) -> list[dict[str, Any]]:
-        """List orders, optionally filtered by customer ID and order status."""
-        return backend.list_orders(customer_id=customer_id, status=status)
+        """List orders. Use customer ID 0 and empty status for all orders."""
+        return backend.list_orders(
+            customer_id=customer_id or None,
+            status=status or None,
+        )
 
     @server.tool()
     def get_sales_summary(customer_id: int) -> dict[str, Any]:
