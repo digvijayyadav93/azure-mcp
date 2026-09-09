@@ -1,8 +1,8 @@
-"""Create a Microsoft Foundry prompt agent backed by this MCP server.
+"""Create and verify a Microsoft Foundry prompt agent backed by this MCP server.
 
-Authentication comes from DefaultAzureCredential. Run ``az login`` before this
-script. The MCP API key is not passed here; it is stored in the Foundry project
-connection created by configure_foundry.ps1.
+Authentication comes from DefaultAzureCredential. Run az login before this
+script. The MCP API key is stored in the Foundry project connection created by
+configure_foundry.ps1 and is never written to this script or its output.
 """
 
 from __future__ import annotations
@@ -34,6 +34,7 @@ def build_agent_definition(
     tool = MCPTool(
         server_label="customer_data",
         server_url=mcp_server_url,
+        server_description="Read-only customer and order data from Azure SQL.",
         require_approval="never",
         project_connection_id=connection_name,
         allowed_tools=ALLOWED_TOOLS,
@@ -46,7 +47,7 @@ def build_agent_definition(
 
 
 def run_agent_smoke_test(project: AIProjectClient, agent_name: str) -> dict[str, Any]:
-    """Require a real MCP call and a result grounded in customer 1."""
+    """Require a completed MCP call and a result grounded in customer 1."""
 
     openai = project.get_openai_client()
     conversation = openai.conversations.create()
@@ -64,21 +65,60 @@ def run_agent_smoke_test(project: AIProjectClient, agent_name: str) -> dict[str,
                 }
             },
         )
-        output_types = [getattr(item, "type", "unknown") for item in response.output]
-        output_text = response.output_text or ""
-        if "mcp_call" not in output_types:
+
+        response_status = getattr(response, "status", None)
+        if response_status != "completed":
+            raise RuntimeError(f"Agent response did not complete: {response_status!r}")
+
+        mcp_calls = [
+            item for item in response.output
+            if getattr(item, "type", "") == "mcp_call"
+            and getattr(item, "name", "") == "get_customer"
+        ]
+        if not mcp_calls:
+            observed = [
+                {
+                    "type": getattr(item, "type", "unknown"),
+                    "name": getattr(item, "name", None),
+                    "status": getattr(item, "status", None),
+                }
+                for item in response.output
+            ]
             raise RuntimeError(
-                "Agent answered without a recorded MCP call. "
-                f"Observed response item types: {output_types}"
+                "Agent did not record a get_customer MCP call. "
+                f"Observed output: {observed}"
             )
+
+        mcp_call = mcp_calls[-1]
+        call_status = getattr(mcp_call, "status", None)
+        call_error = getattr(mcp_call, "error", None)
+        if call_status != "completed" or call_error is not None:
+            raise RuntimeError(
+                "get_customer MCP call failed. "
+                f"status={call_status!r}, error={call_error!r}"
+            )
+
+        call_output = getattr(mcp_call, "output", None)
+        serialized_output = json.dumps(call_output, default=str)
+        if "Aarav Sharma" not in serialized_output:
+            raise RuntimeError(
+                "Completed MCP call did not return the expected Azure SQL record. "
+                f"Output: {serialized_output}"
+            )
+
+        output_text = response.output_text or ""
         if "Aarav Sharma" not in output_text:
             raise RuntimeError(
-                "Agent MCP call completed, but the expected customer was absent. "
+                "Agent final response omitted the customer returned by MCP. "
                 f"Response: {output_text!r}"
             )
+
         return {
             "response_id": response.id,
-            "output_types": output_types,
+            "response_status": response_status,
+            "mcp_call_name": getattr(mcp_call, "name", None),
+            "mcp_call_status": call_status,
+            "mcp_call_output": call_output,
             "output_text": output_text,
         }
     finally:
@@ -137,4 +177,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
