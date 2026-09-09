@@ -52,7 +52,7 @@ class Settings:
             sqlite_path = PROJECT_ROOT / sqlite_path
 
         default_host = "0.0.0.0" if running_in_azure else "127.0.0.1"
-        return cls(
+        settings = cls(
             use_api=_as_bool(env.get("USE_API"), default=False),
             sqlite_path=sqlite_path,
             sql_connection_string=env.get("SQL_CONNECTION_STRING", ""),
@@ -63,3 +63,11 @@ class Settings:
             port=int(env.get("MCP_PORT", "8000")),
             request_timeout_seconds=float(env.get("DB_API_TIMEOUT_SECONDS", "10")),
         )
+
+        if running_in_azure:
+            if len(settings.mcp_api_key) < 16:
+                raise RuntimeError("MCP_API_KEY must contain at least 16 characters in Azure")
+            if len(settings.db_api_key) < 16:
+                raise RuntimeError("DB_API_KEY must contain at least 16 characters in Azure")
+
+        return settings
