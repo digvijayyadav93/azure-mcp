@@ -1,4 +1,4 @@
-"""Backend abstraction that makes USE_API a real runtime switch."""
+"""Backend abstractions for direct database and HTTP API execution."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any, Protocol
 import httpx
 
 from app.config import Settings
-from app.database import SQLiteRepository
+from app.database import CustomerRepository
 from app.errors import BackendError, NotFoundError
 
 
@@ -31,9 +31,9 @@ class CustomerBackend(Protocol):
 
 
 class SQLiteBackend:
-    """Direct database backend used when USE_API=false."""
+    """Direct repository backend used for SQLite or Azure SQL."""
 
-    def __init__(self, repository: SQLiteRepository):
+    def __init__(self, repository: CustomerRepository):
         self.repository = repository
 
     def get_customer(self, customer_id: int) -> dict[str, Any]:
@@ -59,7 +59,7 @@ class SQLiteBackend:
 
 
 class APIBackend:
-    """HTTP adapter used for the mock API now and the real DB API later."""
+    """HTTP adapter used for the sample API now and a production DB API later."""
 
     def __init__(
         self,
@@ -108,7 +108,11 @@ class APIBackend:
         country: str | None = None,
         tier: str | None = None,
     ) -> list[dict[str, Any]]:
-        params = {key: value for key, value in {"name": name, "country": country, "tier": tier}.items() if value}
+        params = {
+            key: value
+            for key, value in {"name": name, "country": country, "tier": tier}.items()
+            if value
+        }
         return self._get("/api/customers", params=params)
 
     def list_orders(
@@ -127,7 +131,10 @@ class APIBackend:
         return self._get(f"/api/customers/{customer_id}/sales-summary")
 
 
-def build_backend(settings: Settings, repository: SQLiteRepository) -> CustomerBackend:
+def build_backend(
+    settings: Settings,
+    repository: CustomerRepository,
+) -> CustomerBackend:
     if settings.use_api:
         return APIBackend(
             base_url=settings.db_api_base_url,
@@ -135,4 +142,3 @@ def build_backend(settings: Settings, repository: SQLiteRepository) -> CustomerB
             timeout_seconds=settings.request_timeout_seconds,
         )
     return SQLiteBackend(repository)
-
