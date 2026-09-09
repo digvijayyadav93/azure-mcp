@@ -8,6 +8,7 @@ param(
     [string]$PythonVersion = "3.13",
     [bool]$UseApi = $false,
     [string]$DbApiBaseUrl = "",
+    [string]$SqlConnectionString = "",
     [string]$PythonExecutable = "python",
     [switch]$ValidateOnly
 )
@@ -32,6 +33,12 @@ if ($FunctionAppName -notmatch '^[a-z0-9][a-z0-9-]{1,58}[a-z0-9]$') {
 }
 if ($UseApi -and $DbApiBaseUrl -notmatch '^https://') {
     throw "DbApiBaseUrl must be an HTTPS URL when UseApi=true."
+}
+if ($UseApi -and $SqlConnectionString) {
+    throw "Choose either UseApi=true or a direct SqlConnectionString, not both."
+}
+if ($SqlConnectionString -and $SqlConnectionString -notmatch 'Authentication=ActiveDirectoryMSI') {
+    throw "SqlConnectionString must use Authentication=ActiveDirectoryMSI."
 }
 if (-not $env:MCP_API_KEY -or $env:MCP_API_KEY.Length -lt 16) {
     throw "Set MCP_API_KEY to a random value of at least 16 characters before deployment."
@@ -61,32 +68,25 @@ if ($LASTEXITCODE -ne 0) {
     Assert-CommandSucceeded "Creating the resource group"
 }
 
-$null = & az storage account show --name $StorageAccountName --resource-group $ResourceGroupName --only-show-errors --output none 2>$null
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "Creating storage account $StorageAccountName..."
-    $null = & az storage account create `
-        --name $StorageAccountName `
-        --resource-group $ResourceGroupName `
-        --location $Location `
-        --sku Standard_LRS `
-        --allow-blob-public-access false `
-        --output none
-    Assert-CommandSucceeded "Creating the storage account"
+$null = & az functionapp show --name $FunctionAppName --resource-group $ResourceGroupName --only-show-errors --output none 2>$null
+$functionExists = $LASTEXITCODE -eq 0
+if (-not $functionExists) {
+    $null = & az storage account show --name $StorageAccountName --resource-group $ResourceGroupName --only-show-errors --output none 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Creating storage account $StorageAccountName..."
+        $null = & az storage account create             --name $StorageAccountName             --resource-group $ResourceGroupName             --location $Location             --sku Standard_LRS             --allow-blob-public-access false             --output none
+        Assert-CommandSucceeded "Creating the storage account"
+    }
+
+    Write-Host "Creating Flex Consumption Function App $FunctionAppName..."
+    $null = & az functionapp create         --name $FunctionAppName         --resource-group $ResourceGroupName         --storage-account $StorageAccountName         --flexconsumption-location $Location         --runtime python         --runtime-version $PythonVersion         --functions-version 4         --output none
+    Assert-CommandSucceeded "Creating the Function App"
 }
 
-$null = & az functionapp show --name $FunctionAppName --resource-group $ResourceGroupName --only-show-errors --output none 2>$null
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "Creating Flex Consumption Function App $FunctionAppName..."
-    $null = & az functionapp create `
-        --name $FunctionAppName `
-        --resource-group $ResourceGroupName `
-        --storage-account $StorageAccountName `
-        --flexconsumption-location $Location `
-        --runtime python `
-        --runtime-version $PythonVersion `
-        --functions-version 4 `
-        --output none
-    Assert-CommandSucceeded "Creating the Function App"
+if ($SqlConnectionString) {
+    Write-Host "Enabling the Function App system-assigned managed identity..."
+    $null = & az functionapp identity assign         --name $FunctionAppName         --resource-group $ResourceGroupName         --output none
+    Assert-CommandSucceeded "Enabling the Function App managed identity"
 }
 
 $useApiValue = $UseApi.ToString().ToLowerInvariant()
@@ -94,19 +94,23 @@ $appSettings = @(
     "MCP_API_KEY=$($env:MCP_API_KEY)",
     "DB_API_KEY=$($env:DB_API_KEY)",
     "USE_API=$useApiValue",
-    "MCP_HOST=0.0.0.0"
+    "MCP_HOST=0.0.0.0",
+    "SQL_CONNECTION_STRING=$SqlConnectionString"
 )
 if ($UseApi) {
     $appSettings += "DB_API_BASE_URL=$DbApiBaseUrl"
 }
 
 Write-Host "Applying Function App settings..."
-$null = & az functionapp config appsettings set `
-    --name $FunctionAppName `
-    --resource-group $ResourceGroupName `
-    --settings @appSettings `
-    --output none
+$null = & az functionapp config appsettings set     --name $FunctionAppName     --resource-group $ResourceGroupName     --settings @appSettings     --output none
 Assert-CommandSucceeded "Applying Function App settings"
+
+$defaultHostName = & az functionapp show     --name $FunctionAppName     --resource-group $ResourceGroupName     --query defaultHostName     --output tsv
+Assert-CommandSucceeded "Reading the Function App hostname"
+if (-not $defaultHostName) {
+    throw "Azure did not return a default hostname for $FunctionAppName."
+}
+$baseUrl = "https://$defaultHostName"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $repoRoot
@@ -115,7 +119,6 @@ try {
     & func azure functionapp publish $FunctionAppName --python
     Assert-CommandSucceeded "Publishing the Function App"
 
-    $baseUrl = "https://$FunctionAppName.azurewebsites.net"
     $healthy = $false
     for ($attempt = 1; $attempt -le 30; $attempt++) {
         try {
@@ -135,14 +138,11 @@ try {
     }
 
     Write-Host "Running the deployed MCP protocol smoke test..."
-    & $PythonExecutable scripts\smoke_test.py `
-        --url "$baseUrl/mcp" `
-        --api-key $env:MCP_API_KEY `
-        --customer-id 1
+    & $PythonExecutable scriptssmoke_test.py         --url "$baseUrl/mcp"         --api-key $env:MCP_API_KEY         --customer-id 1
     Assert-CommandSucceeded "Testing the deployed MCP endpoint"
 }
 finally {
     Pop-Location
 }
 
-Write-Host "Function deployment passed. MCP endpoint: https://$FunctionAppName.azurewebsites.net/mcp"
+Write-Host "Function deployment passed. MCP endpoint: $baseUrl/mcp"
