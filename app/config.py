@@ -29,6 +29,7 @@ class Settings:
 
     use_api: bool = False
     sqlite_path: Path = PROJECT_ROOT / "data" / "sample.db"
+    sql_connection_string: str = ""
     db_api_base_url: str = "http://127.0.0.1:8000"
     db_api_key: str = ""
     mcp_api_key: str = ""
@@ -54,6 +55,7 @@ class Settings:
         return cls(
             use_api=_as_bool(env.get("USE_API"), default=False),
             sqlite_path=sqlite_path,
+            sql_connection_string=env.get("SQL_CONNECTION_STRING", ""),
             db_api_base_url=env.get("DB_API_BASE_URL", "http://127.0.0.1:8000").rstrip("/"),
             db_api_key=env.get("DB_API_KEY", ""),
             mcp_api_key=env.get("MCP_API_KEY", ""),
