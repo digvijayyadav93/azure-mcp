@@ -1,4 +1,4 @@
-"""Sample DB API whose contract can later be implemented by a real API."""
+"""Replaceable sample DB API contract backed by a customer repository."""
 
 from __future__ import annotations
 
@@ -7,15 +7,15 @@ from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 
-from app.database import SQLiteRepository
+from app.database import CustomerRepository
 from app.errors import NotFoundError
 
 
-def create_mock_api(repository: SQLiteRepository, api_key: str = "") -> FastAPI:
-    """Create a FastAPI app backed by SQLite.
+def create_mock_api(repository: CustomerRepository, api_key: str = "") -> FastAPI:
+    """Create the sample DB API over the selected repository.
 
-    When api_key is empty authentication is disabled for local development. In
-    Azure, set DB_API_KEY and pass that same value to the MCP API backend.
+    Local development may use an empty key. Azure startup validation requires a
+    strong DB_API_KEY, so deployed API routes always remain authenticated.
     """
 
     api = FastAPI(
