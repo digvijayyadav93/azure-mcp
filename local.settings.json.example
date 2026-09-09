@@ -7,9 +7,9 @@
     "USE_API": "false",
     "DB_API_BASE_URL": "http://127.0.0.1:8000",
     "DB_API_KEY": "temporary-db-api-key",
+    "SQL_CONNECTION_STRING": "",
     "SQLITE_PATH": "data/sample.db",
     "MCP_HOST": "127.0.0.1",
     "MCP_PORT": "8000"
   }
 }
-
