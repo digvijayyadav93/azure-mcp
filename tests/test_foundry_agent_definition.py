@@ -21,6 +21,7 @@ def test_foundry_definition_wires_authenticated_mcp_and_allowlist() -> None:
             "type": "mcp",
             "server_label": "customer_data",
             "server_url": "https://example.azurewebsites.net/mcp",
+            "server_description": "Read-only customer and order data from Azure SQL.",
             "require_approval": "never",
             "project_connection_id": "customer-data-mcp-connection",
             "allowed_tools": ALLOWED_TOOLS,
@@ -29,8 +30,19 @@ def test_foundry_definition_wires_authenticated_mcp_and_allowlist() -> None:
 
 
 class _Item:
-    def __init__(self, item_type: str):
+    def __init__(
+        self,
+        item_type: str,
+        name: str | None = None,
+        status: str | None = None,
+        error: object | None = None,
+        output: object | None = None,
+    ):
         self.type = item_type
+        self.name = name
+        self.status = status
+        self.error = error
+        self.output = output
 
 
 class _Conversations:
@@ -45,9 +57,10 @@ class _Conversations:
 
 
 class _Responses:
-    def __init__(self, output_types: list[str], output_text: str):
-        self.output_types = output_types
+    def __init__(self, items: list[_Item], output_text: str, status: str = "completed"):
+        self.items = items
         self.output_text = output_text
+        self.status = status
 
     def create(self, **_kwargs):
         return type(
@@ -55,36 +68,60 @@ class _Responses:
             (),
             {
                 "id": "response-1",
-                "output": [_Item(item_type) for item_type in self.output_types],
+                "status": self.status,
+                "output": self.items,
                 "output_text": self.output_text,
             },
         )()
 
 
 class _OpenAI:
-    def __init__(self, output_types: list[str], output_text: str):
+    def __init__(self, items: list[_Item], output_text: str, status: str = "completed"):
         self.conversations = _Conversations()
-        self.responses = _Responses(output_types, output_text)
+        self.responses = _Responses(items, output_text, status)
 
 
 class _Project:
-    def __init__(self, output_types: list[str], output_text: str):
-        self.openai = _OpenAI(output_types, output_text)
+    def __init__(self, items: list[_Item], output_text: str, status: str = "completed"):
+        self.openai = _OpenAI(items, output_text, status)
 
     def get_openai_client(self):
         return self.openai
 
 
-def test_agent_smoke_test_requires_tool_trace_and_expected_record() -> None:
-    project = _Project(["mcp_call", "message"], "Aarav Sharma is a Gold customer in India.")
+def test_agent_smoke_test_requires_completed_mcp_call_and_expected_record() -> None:
+    mcp_call = _Item(
+        "mcp_call",
+        name="get_customer",
+        status="completed",
+        output={"id": 1, "name": "Aarav Sharma", "country": "India", "tier": "Gold"},
+    )
+    project = _Project(
+        [mcp_call, _Item("message")],
+        "Aarav Sharma is a Gold customer in India.",
+    )
     result = run_agent_smoke_test(project, "customer-data-agent")
     assert result["response_id"] == "response-1"
-    assert "mcp_call" in result["output_types"]
+    assert result["response_status"] == "completed"
+    assert result["mcp_call_name"] == "get_customer"
+    assert result["mcp_call_status"] == "completed"
     assert project.openai.conversations.deleted == ["conversation-1"]
 
 
 def test_agent_smoke_test_rejects_untraced_answer_and_cleans_conversation() -> None:
-    project = _Project(["message"], "Aarav Sharma is a Gold customer in India.")
-    with pytest.raises(RuntimeError, match="without a recorded MCP call"):
+    project = _Project([_Item("message")], "Aarav Sharma is a Gold customer in India.")
+    with pytest.raises(RuntimeError, match="did not record a get_customer MCP call"):
         run_agent_smoke_test(project, "customer-data-agent")
     assert project.openai.conversations.deleted == ["conversation-1"]
+
+
+def test_agent_smoke_test_rejects_failed_mcp_call() -> None:
+    failed_call = _Item(
+        "mcp_call",
+        name="get_customer",
+        status="failed",
+        error={"message": "connection failed"},
+    )
+    project = _Project([failed_call], "Aarav Sharma")
+    with pytest.raises(RuntimeError, match="get_customer MCP call failed"):
+        run_agent_smoke_test(project, "customer-data-agent")
