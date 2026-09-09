@@ -1,4 +1,4 @@
-"""Composition root for the mock API and MCP Streamable HTTP application."""
+"""Composition root for the database API and MCP Streamable HTTP application."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from fastapi import FastAPI
 
 from app.backends import CustomerBackend, build_backend
 from app.config import Settings
-from app.database import SQLiteRepository
+from app.database import AzureSQLRepository, CustomerRepository, SQLiteRepository
 from app.mcp_server import create_mcp_server
 from app.mock_api import create_mock_api
 
@@ -56,10 +56,15 @@ class MCPApiKeyMiddleware:
 
 def build_asgi_app(
     settings: Settings,
-    repository: SQLiteRepository | None = None,
+    repository: CustomerRepository | None = None,
     backend: CustomerBackend | None = None,
 ) -> FastAPI:
-    repository = repository or SQLiteRepository(settings.sqlite_path)
+    if repository is None:
+        repository = (
+            AzureSQLRepository(settings.sql_connection_string)
+            if settings.sql_connection_string
+            else SQLiteRepository(settings.sqlite_path)
+        )
     repository.initialize()
     backend = backend or build_backend(settings, repository)
 
@@ -84,4 +89,3 @@ def build_asgi_app(
     api.state.mcp_server = mcp_server
     api.mount("/", MCPApiKeyMiddleware(mcp_asgi, settings.mcp_api_key))
     return api
-
