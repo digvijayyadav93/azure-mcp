@@ -1,6 +1,17 @@
 """Azure Functions Python v2 entry point."""
 
+import asyncio
+from datetime import datetime, timezone
+import json
+import os
+import secrets
+import time
+from urllib.parse import urlsplit
+
 import azure.functions as func
+from fastapi import Header
+from fastapi.responses import JSONResponse
+import httpx
 
 from app.runtime import asgi_app
 
@@ -14,20 +25,10 @@ app = func.AsgiFunctionApp(
 )
 
 
-# Temporary, function-key-protected outbound connectivity diagnostic.
+# Temporary, X-API-Key-protected outbound connectivity diagnostic.
 # Disabled until OUTBOUND_PROBE_URLS is set to a JSON array of 1-3 approved
 # HTTPS URLs in Azure app settings. It never accepts target URLs from callers,
 # sends credentials, follows redirects, or reads/returns response bodies.
-import asyncio
-from datetime import datetime, timezone
-import json
-import os
-import time
-from urllib.parse import urlsplit
-
-import httpx
-
-
 def _outbound_probe_urls(raw: str) -> list[str]:
     urls = json.loads(raw)
     if not isinstance(urls, list) or not 1 <= len(urls) <= 3:
@@ -72,27 +73,36 @@ async def _probe_one(client: httpx.AsyncClient, url: str) -> dict:
     return result
 
 
-@app.function_name(name="outbound_connectivity_probe")
-@app.route(
-    route="diagnostics/outbound",
-    methods=["POST"],
-    auth_level=func.AuthLevel.FUNCTION,
-)
-async def outbound_connectivity_probe(req: func.HttpRequest) -> func.HttpResponse:
+@asgi_app.post("/diagnostics/outbound", include_in_schema=False)
+async def outbound_connectivity_probe(
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+) -> JSONResponse:
+    expected_api_key = os.environ.get("MCP_API_KEY", "")
+    if (
+        not expected_api_key
+        or not x_api_key
+        or not secrets.compare_digest(x_api_key, expected_api_key)
+    ):
+        return JSONResponse(
+            {"error": "Unauthorized."},
+            status_code=401,
+            headers={"Cache-Control": "no-store"},
+        )
+
     raw = os.environ.get("OUTBOUND_PROBE_URLS", "")
     if not raw:
-        return func.HttpResponse(
-            '{"error":"Probe disabled: OUTBOUND_PROBE_URLS is not configured."}',
+        return JSONResponse(
+            {"error": "Probe disabled: OUTBOUND_PROBE_URLS is not configured."},
             status_code=409,
-            mimetype="application/json",
+            headers={"Cache-Control": "no-store"},
         )
     try:
         urls = _outbound_probe_urls(raw)
-    except (TypeError, ValueError):
-        return func.HttpResponse(
-            '{"error":"Invalid OUTBOUND_PROBE_URLS configuration."}',
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return JSONResponse(
+            {"error": "Invalid OUTBOUND_PROBE_URLS configuration."},
             status_code=400,
-            mimetype="application/json",
+            headers={"Cache-Control": "no-store"},
         )
 
     async with httpx.AsyncClient(
@@ -102,13 +112,13 @@ async def outbound_connectivity_probe(req: func.HttpRequest) -> func.HttpRespons
         headers={"User-Agent": "azure-mcp-connectivity-probe/1.0"},
     ) as client:
         results = await asyncio.gather(*(_probe_one(client, url) for url in urls))
-    return func.HttpResponse(
-        json.dumps({
+
+    return JSONResponse(
+        {
             "source": "function_runtime",
             "azure_site": os.environ.get("WEBSITE_SITE_NAME"),
             "utc": datetime.now(timezone.utc).isoformat(),
             "results": results,
-        }),
-        mimetype="application/json",
+        },
         headers={"Cache-Control": "no-store"},
     )
