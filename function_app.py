@@ -122,3 +122,9 @@ async def outbound_connectivity_probe(
         },
         headers={"Cache-Control": "no-store"},
     )
+
+
+# build_asgi_app mounts the MCP transport at "/" as the final fallback route.
+# This diagnostic is registered afterward, so move only its route ahead of the
+# mount to ensure /diagnostics/outbound reaches the protected handler.
+asgi_app.router.routes.insert(0, asgi_app.router.routes.pop())
